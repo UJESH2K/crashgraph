@@ -1,0 +1,14 @@
+# FalkorDB with the trained memory preloaded.
+#   docker compose up -d        -> FalkorDB on :6379, FalkorDB Browser on http://localhost:3000
+# data/crashgraph.db is a standard Redis RDB file (written by FalkorDBLite / train.py),
+# so it is loaded as dump.rdb on start. Delete it to start from an empty memory.
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    ports:
+      - "6379:6379"
+      - "3000:3000"
+    volumes:
+      - ./data:/var/lib/falkordb/data
+    environment:
+      - REDIS_ARGS=--dbfilename crashgraph.db --save 60 1

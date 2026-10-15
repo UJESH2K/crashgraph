@@ -1,0 +1,10 @@
+gymnasium[box2d]>=1.0
+numpy
+falkordb
+falkordblite; sys_platform != "win32" and python_version >= "3.12"
+fastapi
+uvicorn[standard]
+# optional
+mcp
+reactor-sdk
+pillow

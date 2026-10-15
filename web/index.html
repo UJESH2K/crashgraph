@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crashgraph control room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow+Semi+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "/static/vendor/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="app">
+  <main class="stage">
+    <canvas id="scene" aria-label="3D view of the lander"></canvas>
+
+    <header class="topbar">
+      <div class="brand">
+        <h1>crashgraph</h1>
+        <p>A lander with no neural network. Everything it knows is a FalkorDB graph of its own attempts.</p>
+      </div>
+      <div class="worlds" role="radiogroup" aria-label="World" id="worlds"></div>
+    </header>
+
+    <section class="hud" aria-live="polite">
+      <div class="hud-attempt"><span id="hud-mode">Live</span> attempt <b id="hud-n">–</b></div>
+      <dl class="readouts">
+        <div><dt>Altitude</dt><dd id="hud-alt">–</dd></div>
+        <div><dt>Descent</dt><dd id="hud-vy">–</dd></div>
+        <div><dt>Tilt</dt><dd id="hud-tilt">–</dd></div>
+        <div><dt>Frame</dt><dd id="hud-step">–</dd></div>
+      </dl>
+      <p class="hud-sit" id="hud-sit">Waiting for the first attempt</p>
+      <div class="qbars" id="qbars" title="Action values the pilot just read from the graph"></div>
+    </section>
+
+    <img id="reactor-view" alt="Photoreal view generated live by Reactor from the 3D render" hidden>
+    <div class="banner" id="banner" hidden></div>
+
+    <footer class="controls">
+      <div class="group">
+        <button id="btn-run" class="primary">Start flying</button>
+        <button id="btn-interrupt" title="End this attempt now. What it saw so far is still written to the graph.">Interrupt attempt</button>
+        <button id="btn-gust-l" title="Shove the lander left">Gust ←</button>
+        <button id="btn-gust-r" title="Shove the lander right">Gust →</button>
+      </div>
+      <div class="group seg" role="radiogroup" aria-label="Speed" id="speed">
+        <button data-speed="watch">Watch</button>
+        <button data-speed="fast">Fast</button>
+        <button data-speed="train">Train</button>
+      </div>
+      <label class="toggle" title="Fly with no exploration and no learning, to test what the graph knows">
+        <input type="checkbox" id="exam"> Exam mode
+      </label>
+      <label class="toggle" id="reactor-toggle" title="Repaint the 3D view photorealistically with Reactor (uses paid API time, capped)">
+        <input type="checkbox" id="reactor"> Photoreal view
+      </label>
+      <button id="btn-live" hidden>Back to live</button>
+    </footer>
+  </main>
+
+  <aside class="panel">
+    <section class="block">
+      <h2>Memory</h2>
+      <dl class="stats" id="stats"></dl>
+      <div class="curve-wrap">
+        <canvas id="curve" height="120" aria-label="Average score over the last 50 attempts"></canvas>
+      </div>
+      <div class="barcode-wrap">
+        <canvas id="barcode" height="34" aria-label="Every attempt, oldest to newest. Click one to replay it."></canvas>
+        <p class="hint">Every attempt, oldest on the left. Click any one to replay it and see why it ended that way.</p>
+      </div>
+    </section>
+
+    <section class="block" id="why">
+      <h2>Why attempt <span id="why-n">–</span> ended that way</h2>
+      <p class="summary" id="why-summary">Pick an attempt from the strip above, or wait for the next one to finish.</p>
+      <ol class="path" id="why-path"></ol>
+      <div id="why-lesson"></div>
+      <details class="cypher"><summary>Cypher behind this answer</summary><pre id="why-cypher"></pre></details>
+    </section>
+
+    <section class="block">
+      <h2>What the graph has learned</h2>
+      <h3>Where attempts funnel into trouble <small>PageRank × crash rate</small></h3>
+      <ol class="hubs" id="hubs"></ol>
+      <h3>How it crashes</h3>
+      <ul class="sigs" id="sigs"></ul>
+      <button id="btn-refresh-insights" class="quiet">Refresh</button>
+    </section>
+
+    <section class="block">
+      <h2>Memory controls</h2>
+      <div class="memctl">
+        <button id="btn-snap">Save snapshot</button>
+        <select id="snap-list" aria-label="Snapshots"></select>
+        <button id="btn-restore">Restore</button>
+      </div>
+      <div class="memctl">
+        <select id="seed-list" aria-label="Copy skills from world"></select>
+        <button id="btn-seed" title="Copy another world's procedural memory (tiles) into this world">Copy skills</button>
+      </div>
+      <div class="memctl">
+        <button id="btn-wipe" class="danger">Wipe this world's memory</button>
+      </div>
+      <p class="db" id="db"></p>
+    </section>
+    <p class="log" id="log" aria-live="polite"></p>
+  </aside>
+</div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
