@@ -1,0 +1,38 @@
+# Render blueprint: one Docker web service holding FalkorDB, the trainer, the API and the
+# console. Point Render at this repo and it will pick this up; nothing else to configure.
+#
+# Two things worth deciding before you deploy:
+#
+#  * The plan. FalkorDB keeps the graph in memory. A trained Luna is around 95 MB on top of
+#    roughly 250 MB for Python, Gymnasium and Box2D, so `starter` (512 MB) fits but leaves
+#    little room — and the removal test does a GRAPH.COPY, which briefly doubles the graph.
+#    `standard` (2 GB) is the safe choice if you want the Proof tab to work on the deployment.
+#
+#  * The disk. Without one the container starts from an empty graph every deploy and trains
+#    from scratch, which demonstrates the point but means no history to show. A disk keeps the
+#    memory across restarts. Disks are not available on the free plan, and a service with a
+#    disk cannot run more than one instance — which is correct here anyway, since two trainers
+#    on one graph corrupt it and the second would open read-only.
+#
+# The free plan also idles the service out after 15 minutes of no traffic, which stops the
+# trainer. Fine for a link someone clicks once; not for something left running.
+
+services:
+  - type: web
+    name: crashgraph
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    healthCheckPath: /api/state
+    autoDeploy: false
+    envVars:
+      # Which world the trainer opens on. The others are still reachable in the console.
+      - key: CRASHGRAPH_WORLD
+        value: luna
+      # Everything else (FALKORDB_URL, HOST, PORT, CRASHGRAPH_DATA) is set in the Dockerfile.
+      # Add CRASHGRAPH_ORIGINS only if you serve the console from somewhere other than this
+      # service — the single-container setup is same-origin and does not need it.
+    disk:
+      name: graph
+      mountPath: /data
+      sizeGB: 1

@@ -1,0 +1,25 @@
+/* How the attempt ended. Pinned to the bottom of the viewport rather than its middle, so it
+   never lands on top of the craft at the moment you most want to see it. */
+.banner {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--r-sm);
+  font: 600 13px/1 var(--sans);
+  white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden;
+  animation: rise .2s ease-out;
+  pointer-events: none;
+}
+@keyframes rise { from { opacity: 0; transform: translate(-50%, 6px); } }
+
+.banner small {
+  font: 400 10px/1 var(--mono); color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+.landed  { border-left-color: var(--ok);   color: var(--ok); }
+.crashed { border-left-color: var(--bad);  color: var(--bad); }
+.warn    { border-left-color: var(--warn); color: var(--warn); }

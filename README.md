@@ -26,17 +26,21 @@ There is no model file, no Q-table on disk, no fallback policy. The pilot's only
 
 | World | Physics | Attempts | Exam (30 greedy, no learning) |
 |---|---|---|---|
-| Luna | g −10, no wind | 3,030 from scratch | **26–27 / 30 landed**, avg score 141–150 |
-| Ares | g −11, wind 9, turbulence 0.8 | 1,500, skills copied from Luna | 19 / 30 landed, avg 64 |
-| Titan | g −6, wind 4, turbulence 1.6 | 1,500, skills copied from Luna | 21 / 30 landed, avg 144 |
+| Luna | g −10, no wind | 3,000+ from scratch | **26 / 30 landed**, avg score 140.4 |
+| Ares | g −11, wind 9, turbulence 0.8 | 1,530, skills copied from Luna | 19 / 30 landed, avg 64 |
+| Titan | g −6, wind 4, turbulence 1.6 | 1,530, skills copied from Luna | 21 / 30 landed, avg 144 |
 
 **Removal test** (`python removal_test.py --world luna`), same 30 seeded starts each time:
 
 | | Landed | Avg score |
 |---|---|---|
-| With the FalkorDB graph | 26 / 30 | 141.5 |
+| With the FalkorDB graph | 26 / 30 | 140.4 |
 | Graph wiped | **0 / 30** | −125.4 |
-| Graph restored from `GRAPH.COPY` snapshot | 26 / 30 | 141.5 |
+| Graph restored from `GRAPH.COPY` snapshot | 26 / 30 | 140.4 |
+
+Reproduced on Windows 11 with FalkorDB 4.22 in Docker (`docker compose up -d`, trained memory
+loaded from `data/crashgraph.db`). The restore step puts the graph back exactly: tile count is
+unchanged at 106,873 afterwards.
 
 ## How the graph does the work
 
@@ -145,7 +149,17 @@ python server.py            # control room at http://localhost:8000, embedded Fa
 
 On macOS/Linux there is no database to install: FalkorDBLite runs an embedded FalkorDB.
 
-**Windows:** FalkorDBLite has no Windows build, so FalkorDB runs in Docker. Install Docker Desktop and double-click `run.bat` (it starts FalkorDB with the trained memory preloaded via `docker-compose.yml`, installs packages, and opens the control room).
+**Windows:** FalkorDBLite has no Windows build, so FalkorDB runs in Docker (or FalkorDB Cloud).
+Double-click `run.bat`: it creates the venv, installs packages, and picks a database in this order —
+
+1. a `FALKORDB_URL` (or `FALKORDB_CLOUD_URL`) already set in `.env` or the environment → FalkorDB Cloud;
+2. Docker Desktop → `docker compose up -d`, which starts FalkorDB with the trained memory
+   from `data/crashgraph.db` preloaded and FalkorDB Browser on `http://localhost:3000`;
+3. neither → it prints both options instead of failing with a bare error.
+
+If `where docker` cannot find Docker even though Docker Desktop is installed, open a new terminal
+(the installer adds `C:\Program Files\Docker\Docker\resources\bin` to `PATH` only for new shells),
+or set `FALKORDB_URL=redis://localhost:6379` yourself once the container is up.
 
 To use Docker or FalkorDB Cloud on any OS:
 
@@ -155,6 +169,78 @@ FALKORDB_URL=redis://localhost:6379 python server.py
 # FalkorDB Browser on http://localhost:3000 shows the same graphs live
 ```
 
+**Logging into FalkorDB Browser on `localhost:3000`.** It asks for host, port, username and
+password. The local container runs with no authentication, so:
+
+| field | value |
+|---|---|
+| Host | `localhost` |
+| Port | `6379` |
+| Username | *leave empty* (`default` also works) |
+| Password | *leave empty* |
+
+Leaving the password blank is correct, not a mistake — `CONFIG GET requirepass` on the container
+comes back empty. The Browser is a Next.js app served *from inside the container*, so the `localhost`
+you type is resolved there, where FalkorDB is listening on 6379. These are local-only credentials
+and are unrelated to the FalkorDB Cloud ones.
+
+### Deploying it: one container
+
+```bash
+docker build -t crashgraph .
+docker run -p 8000:8000 -v crashgraph-data:/data crashgraph   # http://localhost:8000
+```
+
+That image holds everything: FalkorDB, the trainer, the API and the console, on one port.
+
+The console is built with `CRASHGRAPH_EXPORT=1`, which emits a static site that the Python
+process serves itself. Nothing in the console renders on a server — the 3D views cannot — so
+exporting costs nothing, and it removes a whole category of deployment problem: no second
+host, no CORS, no mixed content, and no API URL baked in at build time. The browser calls
+whatever origin served it, so the same image runs unchanged behind any hostname. The original
+vanilla console is still there at `/classic`.
+
+**Render.** `render.yaml` in the repo is a blueprint for exactly this — point Render at the
+repo and it needs no further configuration. Two things to decide first:
+
+| | why |
+|---|---|
+| **plan** | FalkorDB keeps the graph in memory. Trained Luna is ~95 MB on top of ~250 MB for Python, Gymnasium and Box2D. `starter` (512 MB) fits but leaves little room, and the removal test does a `GRAPH.COPY` that briefly doubles the graph — use `standard` (2 GB) if you want the Proof tab to work on the deployment. |
+| **disk** | Without one, every deploy starts from an empty graph and trains from scratch. That demonstrates the point but leaves no history to show. Disks are not on the free plan. A service with a disk runs one instance, which is correct here anyway: two trainers on one graph corrupt it, and the second would open read-only. |
+
+The free plan also idles the service out after fifteen minutes of no traffic, which stops the
+trainer. Fine for a link someone clicks once.
+
+**What will not work.** Vercel, or anything else serverless, cannot host the Python side. The
+trainer is a thread that runs forever, it holds a websocket open for the whole session, and
+Box2D is a compiled extension — none of which survive a request-scoped function. Vercel can
+host the console on its own if you want the split: set `CRASHGRAPH_API` there (it is baked in
+at build time, so changing it needs a redeploy) and `CRASHGRAPH_ORIGINS` on the API host so
+CORS lets the Vercel domain through. The single container is simpler and has fewer ways to go
+wrong.
+
+**Seeding a deployment with a trained graph.** `data/` is gitignored, so an image built from a
+clean clone has no memory in it. To ship one, mount a volume at `/data` containing a
+`crashgraph.db` written by `train.py` or copied from a local run — it is a standard Redis RDB
+and is loaded on start.
+
+### Live deployment
+
+The trained **Luna** memory also runs on a FalkorDB Cloud instance (`ap-south-1`, FalkorDB 4.22),
+so the graph can be browsed at <https://browser.falkordb.com> without installing anything —
+3,204 attempts, 1,923 landings, 107,209 tiles, all queryable. Connection details are supplied with
+the submission rather than committed here.
+
+```bash
+python push_to_cloud.py --to "redis://falkordb:PASSWORD@HOST:PORT" --only luna
+```
+
+**Size note:** Luna is ~15.5 MB serialized but expands to ~95 MB once loaded, which nearly fills
+the 105 MB free tier (`maxmemory-policy noeviction`). So the cloud copy is a **read-only showcase**;
+`push_to_cloud.py` checks the headroom and refuses a graph that will not fit rather than
+half-filling the instance. Training writes thousands of tiles per attempt and must point at the
+local Docker instance — keep `FALKORDB_URL=redis://localhost:6379` for `server.py` and `train.py`.
+
 Headless training (fast, no UI):
 
 ```bash
@@ -162,15 +248,227 @@ python train.py --world luna --episodes 3000 --exam 50
 python train.py --world ares --episodes 1500 --seed-from luna   # transfer skills to a windy world
 ```
 
-### Control room
+### Two consoles, one backend
+
+The Python process owns the trainer, the graph and the websocket. The UI is separate, so there
+are two front ends against the same backend:
+
+| | run with | notes |
+|---|---|---|
+| **Next.js console** (current) | `run-next.bat` → <http://localhost:3001> | React 18, Next 14 App Router, react-three-fiber, CSS Modules |
+| Vanilla console (original) | `run.bat` → <http://localhost:8000> | no build step, served by FastAPI itself |
+
+```
+browser ──page──────────► Next.js :3001   (the UI, and nothing else)
+        ├─HTTP /api/*────► FastAPI :8000
+        └─WebSocket /ws──► FastAPI :8000
+```
+
+**Both go straight to FastAPI.** The websocket has to: Next's rewrites do not carry websocket
+upgrades, and proxying `/ws` through Next fails silently. The plain requests do too, after the
+rewrite was measured dropping the memory view's whole-graph read — about 400 KB — partway
+through, with `ECONNRESET`, once every several calls while the trainer was writing at full
+speed. Direct, sixteen of sixteen came back clean. `next.config.mjs` keeps the rewrite as a
+fallback for a deployment that clears `NEXT_PUBLIC_API_ORIGIN` and puts both behind one host.
+
+That costs one CORS middleware, restricted to localhost origins — this process can wipe a
+world's memory, so nothing off the machine should be able to ask it to.
+
+Responses go out through `GZipMiddleware`: the graph payload is mostly digits and repeated
+keys, and compresses from 450 KB to 59 KB.
+
+Every read route answers with `{"error": "..."}` rather than a 500 if a query cannot finish,
+so a panel that cannot be filled says why instead of going blank.
+
+**The one-second read timeout.** FalkorDB ships with `TIMEOUT` at 1000 ms, which is sized for
+an interactive console and not for this. The whole-graph scans sit close enough to it that the
+first one after a cold start lost; worse, the pilot's own tile read is on the same cap, and
+when a scan and an attempt overlapped the read came back `Query timed out` and killed the
+attempt mid-flight, which the trainer surfaced as a traceback in the log bar. `connect()` now
+raises `TIMEOUT_DEFAULT` to 30 s on startup — best effort, since a managed instance may refuse
+`CONFIG SET` — and the scans and the pilot's read also pass their own explicit timeouts, so
+the fix holds even where the config change does not.
+
+**Why frames bypass React.** Physics frames arrive about fifty times a second. Putting them in
+React state re-renders the tree on every step, so `lib/store.ts` keeps two channels: slow state
+(console status, finished attempts, the proof run) is subscribable and read with
+`useSyncExternalStore`, while frames and the craft's projected screen position go down an
+imperative path that only the 3D scene and the pinned readout touch.
+
+```
+web-next/
+  app/                  layout, page, global tokens
+  components/shell/     Toolbar, StatusBar, FlightMonitor
+  components/scene/     Scene, Terrain, Lander      (react-three-fiber, the flight stage)
+  components/memory/    MemoryStage, MemoryGraph, GrowthChart  (the memory stage)
+  components/hud/       LanderTag, Banner, ViewStamp, LiveMemoryMap, Dialog
+  components/sidebar/   the left rail: world, risk heatmap, outcome split
+  components/panel/     Panel, Improvement, LearningChart, panes  (the right rail)
+  components/analysis/  the write-up stage
+  lib/                  store, types, graph layouts (memory.ts, livemap.ts), helpers
+```
+
+The console is laid out like a simulator rather than a landing page: a toolbar, three docked
+columns and a status bar, all opaque and separated by hairlines. Nothing is ever drawn over the
+flight except two corner stamps, the readout pinned to the craft and the outcome call-out — a
+panel you can see the scene through is decoration, and it makes the numbers on it harder to
+trust.
+
+### The three stages
+
+The middle of the window is a stage, and the toolbar switches what is on it. The rails, the
+controls and the status bar stay live on all three, so training never stops to let you read
+something. Keys `1`, `2` and `3` switch, and `/#memory` or `/#analysis` opens straight onto
+one — usually what a reviewer following a link wants.
+
+| | what it is on |
+|---|---|
+| **Flight** | the lander flying, with the telemetry pinned to the craft and the memory filling in beside it |
+| **Memory** | the graph it flies on, in 3D, growing and re-weighting as it learns |
+| **Analysis** | the write-up, with every number's source |
+
+Switching stages never stops anything, and never hides it either. The right-hand rail stays
+live on all three, and on Memory and Analysis the left rail turns into a **flight monitor** —
+the Box2D terrain profile, the pad, and the craft descending on it, with the attempt number,
+altitude and descent rate. Reading the write-up while the thing it describes keeps flying in
+the corner of your eye is the point; a stage that takes the whole window and leaves you
+wondering whether training is still going is not.
+
+### Flight stage
 
 - **Start / Pause / Resume** – the trainer process never stops; it idles between attempts.
-- **Interrupt attempt** – ends the current attempt; what it saw is still written to the graph.
-- **Gust ← / →** – shove the lander mid-flight and watch it recover (or not).
-- **Watch / Fast / Train** – real time, ~5×, or full speed with the latest attempt replayed.
-- **Exam mode** – no exploration and no learning: tests only what the graph already knows.
-- **Snapshot / Restore / Wipe / Copy skills** – memory operations on the world's graph (`GRAPH.COPY`).
-- **Attempt strip** – every attempt as a tick, red to green. Click one to replay it in 3D and see why it ended that way.
+- **Interrupt** – ends the current attempt; what it saw is still written to the graph.
+- **Gust ← / →** – shove the lander mid-flight and watch it recover, or not.
+- **Watch / Fast / Train** – real time, ~5×, or full speed. At full speed the trainer sends no
+  frames at all: the physics is the point and the socket would be the bottleneck. The console
+  plays back each attempt's recording as it finishes instead, newest first and one at a time,
+  so the viewport shows something real and recent rather than freezing on the last thing drawn.
+- **Exam** – no exploration and no learning: tests only what the graph already knows.
+- **Attempt strip** – every attempt as a tick, red to green. Click one to replay it in 3D and
+  read why it ended that way. Arrow keys step through attempts.
+- **Memory, live** – the node-link map over the left of the view. Not a picture of the graph:
+  the craft walks its own memory as it flies, the node it is standing on lights, the transition
+  it just took brightens, and when it reaches a situation it has never been in a node is born
+  in the middle of the map and the rest shifts to make room. It lays out the working set — the
+  couple of hundred situations the lander keeps meeting — because the whole graph at 300 pixels
+  across is a grey smudge, and because a layout that small is cheap enough to relax every frame,
+  which is what makes the growth visible rather than merely reported.
+- **Is it improving?** – the first block in the right rail, and the one the rest is evidence
+  for. Landing rate and mean score over a rolling fifty, both updating as attempts finish, with
+  a dashed marker at the attempt the page was opened: everything to the right of it happened
+  while you were watching, and the figures underneath are before and after that line. `Live`
+  keeps a trailing window so a run of landings scrolls past; `All` pulls back to the whole
+  history, which is the right view once a world is trained and the last three hundred attempts
+  are flat.
+- **Why / Graph / Proof / Memory** tabs – the explanation for one attempt, what the graph has
+  learned across all of them, the removal test, and snapshot / restore / transfer / wipe.
+- **Hide either panel** – the two buttons at the right of the toolbar, the handles at the edges
+  of the view, or `[` and `]`. With both away the flight has the whole window, which is what
+  you want when showing it to a room; the handles stay on the edges to bring them back.
+- **Light / dark** – dark is the default and dark is `#000`, because the subject is a vacuum.
+  Light is for a lit room or a projector. The 3D scene stays dark in both: it is a view of
+  space either way. The choice is remembered, and applied before first paint so a black
+  console never flashes white on load.
+- **Free look** – drag or scroll on the view and you take the camera: orbit the craft, watch a
+  landing from underneath or from the pad. "Follow the lander" hands it back. Left alone, the
+  camera flies itself and banks into the drift, so a fast fall reads in the frame.
+#### The Proof tab
+
+Rule 3, run from the UI instead of taken on trust. It snapshots the world, flies *n* seeded
+attempts with the graph, wipes the memory and flies the identical seeds again, then restores the
+snapshot and repeats. A run of three on the trained Luna graph:
+
+| phase | landed | scores |
+|---|---|---|
+| with the graph | 2 / 3 | 222.38, −84.52, 190.67 |
+| graph wiped | **0 / 3** | −142.95, −123.84, −147.15 |
+| restored from snapshot | 2 / 3 | 222.38, −84.52, 190.67 |
+
+The restored scores are identical to the originals, because the same seeds against the same graph
+produce the same flights. With the graph gone nothing lands.
+
+### Memory stage
+
+The claim this project makes is that there is no model file, so what the lander knows is the
+graph and nothing else. The Memory stage is that claim made visible instead of asserted: the
+whole semantic memory, drawn in 3D in the console itself rather than in a database browser.
+
+**Nodes are placed by their own band fields, not by a force layout.** A force layout was the
+obvious first idea and the wrong one — seventeen hundred situations relax into a hairball,
+every node moves whenever one is added, and the same graph looks different on every load, so
+growth becomes impossible to follow. Instead altitude runs up the screen, distance from the pad
+across it and descent speed in depth, with tilt, drift and legs spreading nodes inside their
+cell. The picture of the memory therefore has the shape of the world it describes, a position
+is a fact about the situation, and it is identical on every reload.
+
+- **Colour** is the smoothed crash rate at that situation, on the same jade-to-red scale as the
+  heatmap in the left rail. **Size** is how often the lander has been there. Lines are the
+  `FLOWS` transitions, bright where they have been taken often.
+- **Replay the growth** — or drag the slider — winds the memory back to any attempt. The header
+  counts and the chart marker follow, so "at attempt 259 it held 936 situations and 1,972
+  transitions" is read off the graph, not estimated.
+- **Every finished attempt lands on it live.** The trainer sends the situation keys the attempt
+  passed through; the path lights up, the nodes it visited are re-weighted and recoloured, and
+  the transitions it took thicken. Situations the view has never seen are counted and offered
+  as a reload, because inventing a position for a node that is not in the loaded graph would be
+  exactly the false claim this screen exists to avoid.
+- **taken 3+** hides the transitions with the least evidence behind them. More than half of all
+  `FLOWS` edges have been taken once or twice, and drawing those buries the situations.
+
+Under it, how the memory actually grew: each bar is the number of situations whose earliest
+`VISITED` edge comes from an attempt in that bucket — the attempt that situation entered the
+graph — with the landing rate over the same buckets drawn on top. The two cross: discovery of
+new states dries up at the same time as the craft starts landing. Both come from queries listed
+under the chart.
+
+```cypher
+// when each situation entered the graph
+MATCH (e:Episode)-[:VISITED]->(s:Situation)
+WITH s, min(e.n) AS born RETURN s.k, born
+
+// the graph itself, as positions and weights
+MATCH (s:Situation)
+RETURN s.k, s.alt, s.vy, s.x, s.vx, s.tilt, s.legs, s.visits, s.crash_after, s.land_after, s.label
+MATCH (a:Situation)-[r:FLOWS]->(b:Situation) WHERE r.n >= $min_n
+RETURN a.k, b.k, r.n, r.land, r.crash
+```
+
+Served by `GET /api/memory/graph` and `GET /api/memory/growth`. The graph payload is about
+450 KB of digits and repeated keys for a trained world, which gzips to 59 KB, so the responses
+go out through `GZipMiddleware`.
+
+### Only one process may train a world
+
+Two trainers pointed at one graph both write episodes under the same numbers and both rewrite
+tiles, which corrupts it. Each trainer takes a 30-second lease in Redis
+(`crashgraph:writer:<graph>`) and renews it while it runs; a second process opens **read-only**,
+says so in the status bar, and refuses every command that would write. A lease left behind by a
+killed process expires on its own and the waiting window takes over.
+
+### Photoreal 3D (optional)
+
+The console renders its own lander and terrain, and looks for two glTF files to replace them:
+
+| file | what it is |
+|---|---|
+| `web/assets/vikram.glb` | the craft, in place of the built-in blocky stand-in |
+| `web/assets/petavius.glb` | a lunar surface scan, whose colour/normal/roughness maps are painted onto our terrain |
+| `web/assets/nebula.glb` | a sky sphere drawn around everything, unlit and always centred on the camera |
+
+**The scan supplies surface detail, never the shape.** The ground the lander collides with stays
+exactly the Box2D profile the physics computed, so nothing about the simulation changes when the
+files are present. Both are optional: without them the scene falls back to the procedural look and
+everything else behaves identically.
+
+Sketchfab exports are usually far too heavy to serve (the lunar surface is 53 MB, of which 49 MB
+is two PNGs; the dev server took 30 s to send it). Re-encode them first:
+
+```bash
+python tools/optimize_glb.py in.glb web/assets/petavius.glb --max 2048 --quality 88
+```
+
+That took the surface to 4.2 MB and the lander to 1.6 MB — 8% and 21% of the originals — with
+identical geometry and material slots, and load time from 30 s to 3 s.
 
 ### MCP tools for LLM agents
 
@@ -192,6 +490,43 @@ REACTOR_API_KEY=... REACTOR_MAX_SECONDS=60 REACTOR_BUDGET_SECONDS=600 python ser
 
 Every session stops itself at `REACTOR_MAX_SECONDS`; total use is tracked in `data/reactor_usage.json` and blocked past `REACTOR_BUDGET_SECONDS`.
 
+The lander flies and learns identically whether or not this is switched on — it is a render layer,
+not part of the loop. Verified: the account and key authenticate (`GET /me`), `xmax/x2` is active,
+and `reactor_bridge.py` matches `reactor-sdk` 1.10.0's API (async `connect`/`send_command`,
+`track("source").publish()`, `push_frame`). The end-to-end streaming session is the one thing a
+reviewer should run themselves, since it consumes GPU credit.
+
+```bash
+python reactor_check.py              # free: key, account, model, bridge, budget
+python reactor_check.py --live --yes # paid: films a real graph-flown landing, streams it through X2
+```
+
+`--live` renders the flight first (free) and only then opens the session, so no GPU time is spent
+on physics. Output frames land in `data/reactor_demo/out/`, next to the model's own OpenAPI
+schema as `schema.json`.
+
+Command names are **discovered, not hardcoded**: `request_schema()` returns an OpenAPI document,
+and `commands_from_schema()` reads the accepted commands out of it. Reactor models expose
+auto-generated `set_<field>` setters, and the spelling varies between models — X2 rejects the
+`setPrompt` form with `invalid_command`. Discovering the name means an unknown command can no
+longer abort a session that is already being billed.
+
+**Verified end to end** against `xmax/x2` on a B200: 160 rendered frames of a real graph-flown
+landing in, **121 restyled frames out** at 1088×832, in a 19.7 s session. X2's commands are
+`reset`, `set_keep_backlog`, `set_pointer*`, `set_prompt`, `set_reference_image` (saved to
+`data/reactor_demo/out/schema.json`).
+
+X2 is a *character-swap* model, so `set_prompt` takes an **editing instruction**
+("replace X with Y"), not a caption. With a prompt alone it rewrites the terrain into real
+regolith and dust but leaves the lander as the polygon it was given. To make the craft itself
+photoreal, give it a reference photo — any aspect ratio, scaled and padded, never cropped:
+
+```bash
+python reactor_check.py --live --yes --reference path/to/lander.jpg   # or REACTOR_REFERENCE_IMAGE=...
+```
+
+Use a public-domain image (NASA's are) or your own, per rule 6.
+
 ## Project layout
 
 ```
@@ -203,17 +538,30 @@ crashgraph/explain.py      explanation queries and graph algorithms
 crashgraph/trainer.py      long-running, steerable trainer
 crashgraph/sim.py          Gymnasium LunarLander wrapper (world params, gusts, outcomes)
 crashgraph/reactor_bridge.py  optional photoreal relay
-server.py                  FastAPI + websockets control room
-web/                       Three.js renderer and UI
+server.py                  FastAPI + websockets flight console
+web/index.html .css .js    console shell, styles, and UI logic
+web/scene.js               Three.js renderer (glTF models, terrain, dust, camera)
+web/assets/                optional .glb models, gitignored
+tools/optimize_glb.py      re-encode a .glb's textures so it is servable
 mcp_server.py              MCP tools
 train.py                   headless training
+removal_test.py            rule 3, measured: graph -> wiped -> restored
+reactor_check.py           verify the photoreal layer (free checks, opt-in paid session)
+push_to_cloud.py           copy trained graphs into FalkorDB Cloud
 ```
 
 ## Data and credits
 
 - Physics: [Gymnasium](https://gymnasium.farama.org) LunarLander-v3 (MIT), Box2D. All flight data is generated by our own simulations (synthetic).
+- 3D models (optional, **not redistributed in this repo** — `web/assets/*.glb` is gitignored):
+  the ISRO Chandrayaan-3 Vikram lander module and a scan of the Moon's Petavius crater, both
+  third-party glTF assets used under their own licences. Drop your own copies into `web/assets/`
+  to enable the photoreal view; the console works without them. Credit the author of whichever
+  asset you use, as that asset's licence requires.
 - Algorithms: tile coding and Sarsa(λ) from Sutton & Barto (textbook methods). No code copied from other LunarLander projects; most of those train neural networks (DQN/PPO) and store nothing queryable.
-- Graph: [FalkorDB](https://www.falkordb.com) / FalkorDBLite. 3D: [three.js](https://threejs.org).
+- Graph: [FalkorDB](https://www.falkordb.com) / FalkorDBLite. 3D: [three.js](https://threejs.org)
+  with its `GLTFLoader` and `OrbitControls`, vendored into `web/vendor/` so the console runs
+  offline. UI transitions: [GSAP](https://gsap.com) (vendored). Type: IBM Plex Sans / Mono.
 
 ## AI assistance disclosure
 

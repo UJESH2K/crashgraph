@@ -1,5 +1,35 @@
 // 3D renderer for the Box2D lander. Physics stays 2D (x, y, angle); the scene adds depth, light and weather.
+//
+// Optional photoreal assets, dropped into web/assets/ (see README - they are not in the repo):
+//   vikram.glb     ISRO Chandrayaan-3 Vikram lander, used in place of the built-in blocky lander
+//   petavius.glb   lunar surface scan; its colour and normal maps are painted onto our own terrain
+//                  mesh rather than its geometry being used, so the ground the lander touches stays
+//                  exactly the Box2D profile the physics computed.
+// Everything degrades cleanly: with no assets the scene renders its procedural lander and terrain.
 import * as THREE from "three";
+import { GLTFLoader } from "./vendor/GLTFLoader.js";
+import { OrbitControls } from "./vendor/OrbitControls.js";
+
+const ASSETS = {
+  lander: "/static/assets/vikram.glb",
+  moon: "/static/assets/petavius.glb",
+  sky: "/static/assets/nebula.glb",
+};
+
+/* The skybox rides with the camera so it reads as infinitely far away. The starfield stays
+   fixed in world space, so moving the camera slides the stars against the nebula and the
+   depth of the sky comes out on its own. */
+const SKY_R = 320;
+
+/* The console should open on a real place, not an empty void: Gymnasium's lander flies in a
+   20 x 13.33 world with the pad at y = H/4, so stand in a plausible version of that until the
+   first attempt sends the terrain it actually generated. */
+const DEFAULT_TERRAIN = {
+  w: 20, h: 13.33,
+  pad: [8.2, 11.8, 3.33],
+  ground: [[0, 4.1], [2, 3.0], [4, 4.4], [6, 3.6], [8.2, 3.33], [11.8, 3.33],
+           [14, 4.2], [16, 3.2], [18, 4.6], [20, 3.9]],
+};
 
 const THEMES = {
   luna:  { bg: 0x03050a, fog: 0x03050a, fogD: 0.006, ground: 0x8f9098, ground2: 0x5d5e66, sun: 0xffffff, sunI: 2.6, hemi: 0x263046, sky: "earth", dust: 0xb9b9c0, wind: 0 },
@@ -36,9 +66,149 @@ export class LanderScene {
     this._lander();
     this._particles();
     this.setWorld("luna");
+    this.setTerrain(DEFAULT_TERRAIN);
     addEventListener("resize", () => this.resize());
     this.resize();
     this.renderer.setAnimationLoop(() => this._tick());
+    this.onAssets = null;          // set by the UI to show loading progress
+    this.onCamera = null;          // tells the UI whether the viewer has taken the camera
+    this._orbit();
+    this._loadAssets();
+  }
+
+  /* Two camera modes. By default the camera flies itself, framing the lander against the pad.
+     Drag (or pinch) and you take over: the same orbit stays locked on the craft, so you can
+     look at a landing from underneath, from behind, or from the pad itself. */
+  _orbit() {
+    this.controls = new OrbitControls(this.camera, this.canvas);
+    Object.assign(this.controls, {
+      enableDamping: true, dampingFactor: 0.08,
+      enablePan: false, minDistance: 3, maxDistance: 90,
+      maxPolarAngle: Math.PI * 0.52,       // stop just below the horizon
+      rotateSpeed: 0.7, zoomSpeed: 0.8,
+    });
+    this.controls.enabled = false;
+    this.freeLook = false;
+    const take = () => this.setFreeLook(true);
+    this.canvas.addEventListener("pointerdown", take);
+    this.canvas.addEventListener("wheel", take, { passive: true });
+  }
+
+  /** Where the craft currently sits on screen, so the UI can pin a label to it. */
+  screenPos() {
+    const v = new THREE.Vector3(this.state.x, this.state.y + 0.6, 0).project(this.camera);
+    const r = this.canvas.getBoundingClientRect();
+    return {
+      x: r.left + (v.x * 0.5 + 0.5) * r.width,
+      y: r.top + (-v.y * 0.5 + 0.5) * r.height,
+      visible: v.z < 1 && Math.abs(v.x) < 1.6 && Math.abs(v.y) < 1.6,
+    };
+  }
+
+  setFreeLook(on) {
+    if (this.freeLook === on) return;
+    this.freeLook = on;
+    this.controls.enabled = on;
+    if (on) {
+      this.controls.target.copy(this.camLook);
+      this.camera.position.copy(this.camPos);
+      this.controls.update();
+    }
+    this.onCamera?.(on);
+  }
+
+  // ------------------------------------------------------------- GLB assets
+  async _loadAssets() {
+    const loader = new GLTFLoader();
+    const load = (url, label) => new Promise(res => {
+      loader.load(url,
+        g => res(g),
+        e => this.onAssets?.({ label, loaded: e.loaded, total: e.total }),
+        () => res(null));          // missing or broken file: keep the procedural look
+    });
+
+    const [sky, moon, lander] = await Promise.all([
+      load(ASSETS.sky, "deep space"),
+      load(ASSETS.moon, "lunar surface"),
+      load(ASSETS.lander, "Vikram lander"),
+    ]);
+    if (sky) this._useSkybox(sky.scene);
+    if (moon) {
+      this.moonMaps = this._harvestMaps(moon.scene);
+      if (this.terrainData) this.setTerrain(this.terrainData);
+    }
+    if (lander) this._useLanderModel(lander.scene);
+    this.onAssets?.({ done: true, lander: !!lander, moon: !!moon, sky: !!sky });
+  }
+
+  /** Wrap the scene in the nebula sphere, lit by nothing and drawn behind everything. */
+  _useSkybox(root) {
+    let src = null;
+    root.traverse(o => { if (o.isMesh && !src) src = o; });
+    if (!src) return;
+    const mat = [].concat(src.material)[0] || {};
+    const tex = mat.map || mat.emissiveMap;
+    if (tex) tex.colorSpace = THREE.SRGBColorSpace;
+
+    // Scale from the geometry's own radius, not the world box: the exporter puts a 0.01 scale on
+    // a parent, so the world box (166) and the local geometry (16595) differ by 100x. Using the
+    // world figure here builds a sphere far outside the camera's far plane, and it never draws.
+    src.geometry.computeBoundingSphere();
+    const radius = src.geometry.boundingSphere?.radius || 1;
+    const sky = new THREE.Mesh(src.geometry, new THREE.MeshBasicMaterial({
+      map: tex, side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
+    }));
+    sky.scale.setScalar(SKY_R / radius);
+    sky.renderOrder = -1;
+    sky.frustumCulled = false;
+    this.sky = sky;
+    this.scene.add(sky);
+    this.scene.background = null;          // the sphere is the background now
+  }
+
+  /** Take the surface's colour/normal/roughness maps; we paint them onto our own terrain. */
+  _harvestMaps(root) {
+    const maps = {};
+    root.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      for (const m of [].concat(o.material)) {
+        for (const slot of ["map", "normalMap", "roughnessMap", "aoMap"]) {
+          if (m[slot] && !maps[slot]) {
+            const tex = m[slot];
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+            if (slot === "map") tex.colorSpace = THREE.SRGBColorSpace;
+            maps[slot] = tex;
+          }
+        }
+      }
+    });
+    return maps;
+  }
+
+  /** Swap the blocky stand-in for the real craft, keeping flames and thrusters attached. */
+  _useLanderModel(model) {
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const scale = 2.2 / Math.max(size.x, size.z);     // match the built-in lander's leg span
+    model.scale.setScalar(scale);
+
+    const scaled = new THREE.Box3().setFromObject(model);
+    const mid = scaled.getCenter(new THREE.Vector3());
+    model.position.set(-mid.x, -scaled.min.y - 0.55, -mid.z);   // feet at y = -0.55, centred
+    model.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        for (const m of [].concat(o.material)) {
+          if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+          m.envMapIntensity = 0.8;
+        }
+      }
+    });
+    for (const m of this.procedural) this.lander.remove(m);     // keep flame + rcs children
+    this.procedural = [];
+    this.lander.add(model);
+    this.landerModel = model;
   }
 
   resize() {
@@ -129,6 +299,7 @@ export class LanderScene {
       q.position.set(sx * 0.62, 0.3, 0); L.add(q);
     }
     L.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+    this.procedural = [...L.children];   // the stand-in body, dropped if a real model loads
     // flames
     const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb14a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
     const coreMat = new THREE.MeshBasicMaterial({ color: 0xcfe6ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -177,7 +348,7 @@ export class LanderScene {
     this.world = key;
     const t = THEMES[key] || THEMES.luna;
     this.theme = t;
-    this.scene.background = new THREE.Color(t.bg);
+    this.scene.background = this.sky ? null : new THREE.Color(t.bg);
     this.scene.fog = new THREE.FogExp2(t.fog, t.fogD);
     this.sun.color.set(t.sun); this.sun.intensity = t.sunI;
     this.hemi.color.set(t.hemi);
@@ -222,7 +393,18 @@ export class LanderScene {
     geo.translate(0, 0, 0);
     geo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
     geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+    // With the scanned surface available, paint it over this geometry: the silhouette stays the
+    // Box2D profile the lander actually collides with, and only the surface detail comes from
+    // the scan. Without it, fall back to vertex-coloured flat shading.
+    const scanned = this.world === "luna" && this.moonMaps?.map;
+    const mat = scanned
+      ? new THREE.MeshStandardMaterial({
+          map: this.moonMaps.map, normalMap: this.moonMaps.normalMap || null,
+          roughnessMap: this.moonMaps.roughnessMap || null,
+          roughness: 1.0, metalness: 0.0, normalScale: new THREE.Vector2(1.6, 1.6),
+        })
+      : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     this.terrainGroup.add(mesh);
     // landing pad
@@ -321,14 +503,30 @@ export class LanderScene {
     const padX = this.terrainData ? (this.terrainData.pad[0] + this.terrainData.pad[1]) / 2 : 10;
     const fx = THREE.MathUtils.lerp(s.x, padX, 0.25), fy = THREE.MathUtils.lerp(s.y, ground, 0.35);
     const dist = 7 + Math.min(10, Math.max(0, alt) * 0.9);
-    this.camPos.lerp(new THREE.Vector3(fx + 1.5, fy + 1.6 + dist * 0.18, dist + 2), k * 0.6);
     this.camLook.lerp(new THREE.Vector3(fx, fy, 0), k);
-    this.camera.position.copy(this.camPos);
-    if (this.shake > 0) {
-      this.camera.position.x += (Math.random() - .5) * this.shake; this.camera.position.y += (Math.random() - .5) * this.shake;
-      this.shake = Math.max(0, this.shake - dt * 0.9);
+
+    if (this.freeLook) {
+      this.controls.target.lerp(this.camLook, k * 0.5);   // keep the craft centred while you orbit
+      this.controls.update();
+      this.camPos.copy(this.camera.position);
+    } else {
+      this.camPos.lerp(new THREE.Vector3(fx + 1.5, fy + 1.6 + dist * 0.18, dist + 2), k * 0.6);
+      this.camera.position.copy(this.camPos);
+      if (this.shake > 0) {
+        this.camera.position.x += (Math.random() - .5) * this.shake;
+        this.camera.position.y += (Math.random() - .5) * this.shake;
+      }
+      this.camera.lookAt(this.camLook);
+      // Parallax: bank slightly into the drift and lean with the descent, so a fast fall is
+      // something you feel in the frame rather than only read on the altimeter.
+      const vx = (g.x - s.x), vy = (g.y - s.y);
+      this.roll = THREE.MathUtils.lerp(this.roll || 0, THREE.MathUtils.clamp(-vx * 0.8 - s.a * 0.12, -0.14, 0.14), k * 0.35);
+      this.lean = THREE.MathUtils.lerp(this.lean || 0, THREE.MathUtils.clamp(-vy * 0.5, -0.09, 0.09), k * 0.35);
+      this.camera.rotateZ(this.roll);
+      this.camera.rotateX(this.lean);
     }
-    this.camera.lookAt(this.camLook);
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 0.9);
+    if (this.sky) this.sky.position.copy(this.camera.position);
     this.sun.target.position.set(s.x, ground, 0);
     this.sun.position.set(s.x - 14, ground + 20, 12);
     this.renderer.render(this.scene, this.camera);

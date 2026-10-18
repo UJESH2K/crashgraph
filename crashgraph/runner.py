@@ -7,7 +7,7 @@ from .sim import Flight
 def run_episode(flight: Flight, pilot, mem, n, *, learn=True, epsilon=None, seed=None,
                 on_frame=None, control=None, frame_every=1, realtime=False):
     """control: object with .interrupt (bool) and .pending_gust (None|float) checked each frame,
-    and .paused (bool). on_frame(frame_list, step, q, action, situation_label)."""
+    and .paused (bool). on_frame(frame_list, step, q, action, situation_label, situation_key)."""
     obs = flight.reset(seed=seed)
     eps = pilot.epsilon_for(n) if epsilon is None else epsilon
     pilot.begin(eps, learn=learn)
@@ -32,7 +32,10 @@ def run_episode(flight: Flight, pilot, mem, n, *, learn=True, epsilon=None, seed
         frames.append(fr)
         pilot.observe(r, obs2, term)
         if on_frame is not None and steps % frame_every == 0:
-            on_frame(fr, steps, q, a, pilot.path[-1]["label"] if pilot.path else "")
+            # The key as well as the label: the console's live map lights the exact node this
+            # frame is standing on, and a label is not something you can look a node up by.
+            here = pilot.path[-1] if pilot.path else None
+            on_frame(fr, steps, q, a, here["label"] if here else "", here["k"] if here else "")
         if realtime:
             t_next += 1 / 50
             delay = t_next - time.perf_counter()

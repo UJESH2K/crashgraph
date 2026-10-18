@@ -1,0 +1,39 @@
+/* Overlaid on the left of the flight, where the scene has nothing in it. One of the few
+   things allowed over the viewport, so it stays small and stays out of the middle. */
+.map {
+  position: absolute; top: 10px; left: 12px; z-index: 3;
+  width: 324px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.closed { width: 150px; }
+
+.head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 7px 10px;
+  background: none; border: 0; cursor: pointer; color: var(--ink-3);
+}
+.head:hover { color: var(--ink-2); }
+.chev { width: 9px; height: 6px; transition: transform .2s; }
+.closed .chev { transform: rotate(-90deg); }
+
+.plot { position: relative; display: grid; place-items: center; padding: 0 12px; }
+.plot canvas { display: block; }
+
+.wait {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  margin: 0; font: 400 11px/1 var(--mono); color: var(--ink-3);
+}
+
+.foot {
+  display: flex; flex-direction: column; gap: 3px;
+  margin: 0; padding: 8px 11px 10px;
+}
+.counts { font-size: 10.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.legend { font-size: 10px; line-height: 1.4; color: var(--ink-3); }
+
+@media (max-width: 1180px) { .map { width: 250px; } .plot { padding: 0 6px; } }
+@media (max-width: 900px) { .map { display: none; } }

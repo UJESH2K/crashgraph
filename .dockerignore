@@ -1,0 +1,16 @@
+# Build context: keep it to the source. The trained graph, the recordings and the optional
+# 3D models are all large and none of them belong in an image built from a clean clone.
+.git
+.venv
+__pycache__
+**/__pycache__
+data
+web-next/node_modules
+web-next/.next
+web-next/out
+web-next/tsconfig.tsbuildinfo
+web/assets/*.glb
+web-next/public/assets/*.glb
+*.db
+*.rdb
+.env

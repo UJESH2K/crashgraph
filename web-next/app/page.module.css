@@ -1,0 +1,116 @@
+/* Simulator shell: a toolbar, three docked columns, a status bar.
+   The viewport owns its rectangle — the only things ever drawn over the flight are the two
+   corner stamps, the telemetry pinned to the craft, and the outcome call-out at the bottom. */
+
+.shell {
+  display: grid;
+  height: 100%;
+  grid-template-rows: var(--toolbar-h) minmax(0, 1fr) var(--status-h);
+  /* the two rail widths are set inline so either can collapse to nothing */
+  grid-template-columns: var(--rail-l) minmax(0, 1fr) var(--rail-r);
+  transition: grid-template-columns .26s cubic-bezier(.3, .9, .3, 1);
+  grid-template-areas:
+    "bar    bar   bar"
+    "left   view  right"
+    "status status status";
+  background: var(--app);
+}
+
+.bar { grid-area: bar; min-width: 0; }
+.left { grid-area: left; min-width: 0; min-height: 0; overflow: hidden;
+  border-right: 1px solid var(--line); }
+.right { grid-area: right; min-width: 0; min-height: 0; overflow: hidden;
+  border-left: 1px solid var(--line); }
+.status { grid-area: status; min-width: 0; }
+
+/* ── the viewport ─────────────────────────────────────────── */
+.view {
+  grid-area: view;
+  position: relative;
+  min-width: 0;
+  background: var(--stage-bg);
+  overflow: hidden;
+}
+.view canvas { display: block; width: 100%; height: 100%; }
+
+/* a collapsed rail keeps no border, or a hairline is left floating at the edge of the view */
+.gone { border: 0; }
+
+/* the flight canvas stays mounted behind the other stages so the camera, the terrain and a
+   half-played replay all survive a trip to the memory view and back */
+.flight { position: absolute; inset: 0; }
+
+/* ── the handles that bring a hidden rail back ────────────── */
+.handle {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 7;
+  display: grid; place-items: center;
+  width: 15px; height: 56px; padding: 0;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color .12s, background .12s, width .12s;
+}
+.handle:hover { color: var(--ink); background: var(--raised); width: 19px; }
+.handle svg { width: 7px; height: 11px; }
+.handleL { left: 0; border-left: 0; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.handleR { right: 0; border-right: 0; border-radius: var(--r-sm) 0 0 var(--r-sm); }
+
+/* memory and analysis take the viewport rather than the window: the controls, the rails and
+   the status bar stay live, so you can keep training while reading either one */
+.overlay { position: absolute; inset: 0; z-index: 5; background: var(--app); }
+
+/* only two things sit over the flight itself, both small and at the corners */
+/* top-right: the top-left of the viewport belongs to the live memory map */
+.stamp {
+  position: absolute; top: 10px; right: 12px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 9px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  pointer-events: none;
+}
+.stampMode {
+  font: 500 9px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent);
+}
+.stampN { font: 500 10.5px/1 var(--mono); color: var(--ink-2); }
+
+.camhint {
+  position: absolute; top: 44px; right: 12px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 11px; color: var(--ink-2);
+}
+
+/* a one-line note from the trainer, pinned above the status bar */
+.log {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6;
+  margin: 0; padding: 6px 12px;
+  background: var(--panel); border-top: 1px solid var(--line);
+  font: 400 11px/1.4 var(--mono); color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+@media (max-width: 1440px) {
+  .shell { grid-template-columns: 250px minmax(0, 1fr) 320px; }
+}
+
+@media (max-width: 1180px) {
+  .shell { grid-template-columns: 0 minmax(0, 1fr) 310px; }
+  .left { display: none; }
+}
+
+@media (max-width: 820px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--toolbar-h) 56vh auto var(--status-h);
+    grid-template-areas: "bar" "view" "right" "status";
+    height: auto; min-height: 100%;
+  }
+  .right { border-left: 0; border-top: 1px solid var(--line); }
+}

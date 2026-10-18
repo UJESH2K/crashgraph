@@ -4,3 +4,16 @@ __pycache__/
 *.db
 *.rdb
 .env
+
+# Third-party 3D models: not redistributed with the repo (see README > Credits)
+web/assets/*.glb
+
+# Next.js
+web-next/node_modules/
+web-next/.next/
+web-next/public/assets/*.glb
+web-next/tsconfig.tsbuildinfo
+# The static export is a build output, and it copies public/ wholesale - including the
+# third-party .glb models, which are not redistributed with this repo (see README > Credits).
+web-next/out/
+data/crashgraph.backup-*.db

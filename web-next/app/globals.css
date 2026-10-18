@@ -1,0 +1,172 @@
+/* crashgraph flight console — design tokens and base.
+   Per-component styling lives in CSS modules; this file holds only what is genuinely global.
+
+   Built like a simulator, not a landing page: solid docked panels around a framed viewport,
+   the way Isaac Sim and Foxglove lay out. No translucency and no blur — a panel that lets the
+   scene show through reads as decoration, and makes the numbers on it harder to trust.
+
+   Dark is black, because the subject is a vacuum. The chrome is #000 and separation is done
+   with hairlines and a half-step of lightness on raised surfaces, so the viewport is the only
+   thing on the screen emitting light. */
+
+:root {
+  /* type: a grotesque for the voice, a mono for anything you read a value off */
+  --display: "Space Grotesk", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --r:    5px;
+  --r-sm: 3px;
+
+  --toolbar-h: 46px;
+  --status-h:  26px;
+  --rail-l: 288px;
+  --rail-r: 344px;
+}
+
+/* ── dark: the default, and actually black ──────────────────────────────── */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ink:   #e8edf5;
+  --ink-2: #93a1b5;
+  --ink-3: #626e80;
+
+  --app:    #000000;
+  --panel:  #000000;
+  --raised: #0b0e13;
+  --input:  #12161d;
+  --line:   #1e232c;
+  --line-2: #14181f;
+
+  /* the viewport is a hole cut in the chrome, not a backdrop */
+  --stage-bg: #000000;
+
+  --accent:      #6fa8dc;
+  --accent-ink:  #04070b;
+  --accent-wash: rgba(111, 168, 220, .15);
+
+  --ok:   #3fbf93;
+  --bad:  #e85f70;
+  --warn: #dba13a;
+
+  --shadow:    0 10px 30px rgba(0, 0, 0, .8);
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, .9);
+}
+
+/* ── light: for a bright room or a projector ────────────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ink:   #0e131b;
+  --ink-2: #4a5568;
+  --ink-3: #78839a;
+
+  --app:    #eceef2;
+  --panel:  #ffffff;
+  --raised: #f4f6f9;
+  --input:  #ffffff;
+  --line:   #d4dae3;
+  --line-2: #e4e8ee;
+
+  /* the scene stays dark whatever the chrome does: it is a view of space either way */
+  --stage-bg: #05070b;
+
+  --accent:      #1f5fa8;
+  --accent-ink:  #ffffff;
+  --accent-wash: rgba(31, 95, 168, .11);
+
+  --ok:   #10795a;
+  --bad:  #bb3346;
+  --warn: #8d6115;
+
+  --shadow:    0 10px 26px rgba(16, 24, 40, .13);
+  --shadow-lg: 0 28px 70px rgba(16, 24, 40, .2);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--app);
+  color: var(--ink);
+  font: 400 13px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+/* Headings carry the display face. Small uppercase labels do not — those are data, and they
+   stay in the mono so a column of them lines up. */
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 600;
+  letter-spacing: -.015em;
+  text-wrap: balance;
+}
+
+button, input, select { font: inherit; color: inherit; }
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* the label vocabulary used on every panel header and field */
+.cap {
+  font: 500 9.5px/1 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+::-webkit-scrollbar-track { background: var(--app); }
+
+.btn {
+  padding: 5px 10px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover:not(:disabled) { background: var(--input); border-color: var(--ink-3); }
+.btn:disabled { opacity: .38; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn.danger { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); color: var(--bad); }
+.btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+
+.link {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--accent); font-size: 11px;
+}
+.link:hover { text-decoration: underline; }
+
+select, input[type="text"], input[type="number"] {
+  padding: 4px 7px;
+  background: var(--input);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+}
+
+/* Below the shell's narrow breakpoint the columns stack and the page gets taller than the
+   window, so the body has to scroll. A CSS module cannot carry this: its selectors must be
+   local, and `body` is not. */
+@media (max-width: 820px) {
+  body { overflow: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

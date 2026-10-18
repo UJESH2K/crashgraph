@@ -3,117 +3,266 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>crashgraph control room</title>
+<title>crashgraph flight console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow+Semi+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 <script type="importmap">
-{ "imports": {
-  "three": "/static/vendor/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
-} }
+{ "imports": { "three": "/static/vendor/three.module.js" } }
 </script>
 </head>
 <body>
-<div class="app">
-  <main class="stage">
-    <canvas id="scene" aria-label="3D view of the lander"></canvas>
 
-    <header class="topbar">
-      <div class="brand">
-        <h1>crashgraph</h1>
-        <p>A lander with no neural network. Everything it knows is a FalkorDB graph of its own attempts.</p>
-      </div>
-      <div class="worlds" role="radiogroup" aria-label="World" id="worlds"></div>
-    </header>
+<!-- the scene is the page; everything else floats over it -->
+<canvas id="scene" aria-label="3D view of the lander"></canvas>
+<img id="reactor-view" alt="Photoreal view generated live by Reactor from the 3D render" hidden>
 
-    <section class="hud" aria-live="polite">
-      <div class="hud-attempt"><span id="hud-mode">Live</span> attempt <b id="hud-n">–</b></div>
-      <dl class="readouts">
-        <div><dt>Altitude</dt><dd id="hud-alt">–</dd></div>
-        <div><dt>Descent</dt><dd id="hud-vy">–</dd></div>
-        <div><dt>Tilt</dt><dd id="hud-tilt">–</dd></div>
-        <div><dt>Frame</dt><dd id="hud-step">–</dd></div>
-      </dl>
-      <p class="hud-sit" id="hud-sit">Waiting for the first attempt</p>
-      <div class="qbars" id="qbars" title="Action values the pilot just read from the graph"></div>
-    </section>
-
-    <img id="reactor-view" alt="Photoreal view generated live by Reactor from the 3D render" hidden>
-    <div class="banner" id="banner" hidden></div>
-
-    <footer class="controls">
-      <div class="group">
-        <button id="btn-run" class="primary">Start flying</button>
-        <button id="btn-interrupt" title="End this attempt now. What it saw so far is still written to the graph.">Interrupt attempt</button>
-        <button id="btn-gust-l" title="Shove the lander left">Gust ←</button>
-        <button id="btn-gust-r" title="Shove the lander right">Gust →</button>
-      </div>
-      <div class="group seg" role="radiogroup" aria-label="Speed" id="speed">
-        <button data-speed="watch">Watch</button>
-        <button data-speed="fast">Fast</button>
-        <button data-speed="train">Train</button>
-      </div>
-      <label class="toggle" title="Fly with no exploration and no learning, to test what the graph knows">
-        <input type="checkbox" id="exam"> Exam mode
-      </label>
-      <label class="toggle" id="reactor-toggle" title="Repaint the 3D view photorealistically with Reactor (uses paid API time, capped)">
-        <input type="checkbox" id="reactor"> Photoreal view
-      </label>
-      <button id="btn-live" hidden>Back to live</button>
-    </footer>
-  </main>
-
-  <aside class="panel">
-    <section class="block">
-      <h2>Memory</h2>
-      <dl class="stats" id="stats"></dl>
-      <div class="curve-wrap">
-        <canvas id="curve" height="120" aria-label="Average score over the last 50 attempts"></canvas>
-      </div>
-      <div class="barcode-wrap">
-        <canvas id="barcode" height="34" aria-label="Every attempt, oldest to newest. Click one to replay it."></canvas>
-        <p class="hint">Every attempt, oldest on the left. Click any one to replay it and see why it ended that way.</p>
-      </div>
-    </section>
-
-    <section class="block" id="why">
-      <h2>Why attempt <span id="why-n">–</span> ended that way</h2>
-      <p class="summary" id="why-summary">Pick an attempt from the strip above, or wait for the next one to finish.</p>
-      <ol class="path" id="why-path"></ol>
-      <div id="why-lesson"></div>
-      <details class="cypher"><summary>Cypher behind this answer</summary><pre id="why-cypher"></pre></details>
-    </section>
-
-    <section class="block">
-      <h2>What the graph has learned</h2>
-      <h3>Where attempts funnel into trouble <small>PageRank × crash rate</small></h3>
-      <ol class="hubs" id="hubs"></ol>
-      <h3>How it crashes</h3>
-      <ul class="sigs" id="sigs"></ul>
-      <button id="btn-refresh-insights" class="quiet">Refresh</button>
-    </section>
-
-    <section class="block">
-      <h2>Memory controls</h2>
-      <div class="memctl">
-        <button id="btn-snap">Save snapshot</button>
-        <select id="snap-list" aria-label="Snapshots"></select>
-        <button id="btn-restore">Restore</button>
-      </div>
-      <div class="memctl">
-        <select id="seed-list" aria-label="Copy skills from world"></select>
-        <button id="btn-seed" title="Copy another world's procedural memory (tiles) into this world">Copy skills</button>
-      </div>
-      <div class="memctl">
-        <button id="btn-wipe" class="danger">Wipe this world's memory</button>
-      </div>
-      <p class="db" id="db"></p>
-    </section>
-    <p class="log" id="log" aria-live="polite"></p>
-  </aside>
+<div class="loader" id="loader" hidden>
+  <p class="loader-label" id="loader-label">Loading flight assets</p>
+  <div class="loader-track"><div class="loader-bar" id="loader-bar"></div></div>
 </div>
+
+<div class="hud">
+
+  <!-- ─────────────── top bar ─────────────── -->
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <b>crashgraph</b>
+    </div>
+
+    <div class="crumb">
+      <button class="world-btn" id="world-btn" aria-haspopup="true" aria-expanded="false">
+        <span id="world-name">Luna</span>
+        <small id="world-phys">no wind · g −10</small>
+        <svg viewBox="0 0 10 6" class="chev" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+      <div class="world-menu" id="worlds" role="menu" hidden></div>
+    </div>
+
+    <div class="top-right">
+      <span class="dot-chip" id="chip-conn" data-state="off"><i></i><span>connecting</span></span>
+      <span class="dot-chip warn" id="chip-writer" hidden><i></i><span>read-only</span></span>
+      <span class="dot-chip quiet mono" id="chip-db" title="The FalkorDB this console reads and writes">—</span>
+    </div>
+  </header>
+
+  <!-- ─────────────── label pinned to the craft ─────────────── -->
+  <div class="tag" id="tag" hidden>
+    <svg class="tag-leader" aria-hidden="true"><line x1="0" y1="0" x2="0" y2="0" /></svg>
+    <div class="tag-box">
+      <div class="tag-head"><span class="tag-mode" id="hud-mode">Live</span><span class="mono">#<b id="hud-n">—</b></span></div>
+      <dl class="tag-rows">
+        <div><dt>alt</dt><dd><span id="hud-alt">—</span><u>m</u></dd></div>
+        <div><dt>v↓</dt><dd><span id="hud-vy">—</span><u>m/s</u></dd></div>
+        <div><dt>tilt</dt><dd><span id="hud-tilt">—</span></dd></div>
+        <div><dt>frame</dt><dd><span id="hud-step">—</span></dd></div>
+      </dl>
+      <p class="tag-sit" id="hud-sit">Waiting for the first attempt</p>
+      <div class="qbars" id="qbars"></div>
+    </div>
+  </div>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <div class="camhint" id="camhint" hidden>
+    <span>Free look</span>
+    <button id="btn-camreset" class="link">follow the lander</button>
+  </div>
+
+  <!-- ─────────────── analytics, collapsible ─────────────── -->
+  <aside class="panel" id="panel">
+    <button class="panel-toggle" id="panel-toggle" aria-expanded="true" aria-controls="panel-body">
+      <span>Graph memory</span>
+      <svg viewBox="0 0 10 6" class="chev" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+    </button>
+
+    <div class="panel-body" id="panel-body">
+      <section class="tiles" id="stats" aria-label="Memory size"></section>
+
+      <section class="blk">
+        <header><h2>Learning</h2><span class="note" id="curve-note"></span></header>
+        <canvas id="curve" height="104" aria-label="Average score over the last 50 attempts"></canvas>
+        <canvas id="barcode" height="22" aria-label="Every attempt, oldest to newest. Click one to replay it."></canvas>
+        <p class="hint">Click any attempt to replay it and read why it ended that way.</p>
+      </section>
+
+      <nav class="tabs" role="tablist" aria-label="Detail">
+        <button role="tab" id="tab-why"   aria-controls="pane-why"   aria-selected="true">Why</button>
+        <button role="tab" id="tab-graph" aria-controls="pane-graph" aria-selected="false">Graph</button>
+        <button role="tab" id="tab-proof" aria-controls="pane-proof" aria-selected="false">Proof</button>
+        <button role="tab" id="tab-mem"   aria-controls="pane-mem"   aria-selected="false">Memory</button>
+      </nav>
+
+      <section class="blk pane" id="pane-why" role="tabpanel" aria-labelledby="tab-why">
+        <header><h2>Attempt <span id="why-n" class="mono">—</span></h2></header>
+        <p class="summary" id="why-summary">Pick an attempt, or wait for the next one to finish.</p>
+        <ol class="path" id="why-path"></ol>
+        <div id="why-lesson"></div>
+        <details class="cypher"><summary>Cypher behind this</summary><pre id="why-cypher"></pre></details>
+      </section>
+
+      <section class="blk pane" id="pane-graph" role="tabpanel" aria-labelledby="tab-graph" hidden>
+        <header><h2>What it has learned</h2><button id="btn-refresh-insights" class="link">refresh</button></header>
+        <h3>Danger hubs <small>PageRank × crash rate</small></h3>
+        <ol class="hubs" id="hubs"></ol>
+        <h3>How it crashes</h3>
+        <ul class="sigs" id="sigs"></ul>
+      </section>
+
+      <section class="blk pane" id="pane-proof" role="tabpanel" aria-labelledby="tab-proof" hidden>
+        <header><h2>Does it need the graph?</h2></header>
+        <p class="summary">No weights, no model file, no fallback. Take the graph away and it should
+          fail outright. This flies the same seeds three times to show it.</p>
+        <div class="proof" id="proof"></div>
+        <div class="row">
+          <button id="btn-prove" class="btn primary">Run removal test</button>
+          <label class="inline-field"><span>flights</span><input type="number" id="prove-n" class="mono" value="10" min="3" max="30"></label>
+        </div>
+        <p class="hint" id="proof-note">Snapshots first, restores after. Nothing is lost.</p>
+      </section>
+
+      <section class="blk pane" id="pane-mem" role="tabpanel" aria-labelledby="tab-mem" hidden>
+        <header><h2>Memory</h2></header>
+        <label class="fl" for="snap-list">Snapshots <small>GRAPH.COPY</small></label>
+        <div class="row"><select id="snap-list"></select><button id="btn-restore" class="btn">Restore</button><button id="btn-snap" class="btn">Save</button></div>
+        <label class="fl" for="seed-list">Transfer skills <small>copy another world's tiles</small></label>
+        <div class="row"><select id="seed-list"></select><button id="btn-seed" class="btn">Copy</button></div>
+        <label class="fl">Destructive <small>no undo except a snapshot</small></label>
+        <div class="row"><button id="btn-wipe" class="btn danger">Wipe this world's memory</button></div>
+        <p class="db mono" id="db"></p>
+      </section>
+
+      <p class="log" id="log" aria-live="polite"></p>
+    </div>
+  </aside>
+
+  <!-- ─────────────── tool dock ─────────────── -->
+  <div class="dock">
+    <div class="dock-grp">
+      <button id="btn-run" class="tool wide primary" title="Start or pause the trainer">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path id="run-icon" d="M3 2l7 4-7 4z" fill="currentColor"/></svg>
+        <span id="run-label">Start</span>
+      </button>
+      <button id="btn-interrupt" class="tool" title="End this attempt now; what it saw is still written to the graph" aria-label="Interrupt attempt">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="3" y="3" width="6" height="6" fill="currentColor"/></svg>
+      </button>
+    </div>
+
+    <span class="dock-sep" aria-hidden="true"></span>
+
+    <div class="dock-grp">
+      <button id="btn-gust-l" class="tool" title="Gust pushing left" aria-label="Gust pushing left">
+        <svg viewBox="0 0 14 12" aria-hidden="true"><path d="M9 2L4 6l5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 6H4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <button id="btn-gust-r" class="tool" title="Gust pushing right" aria-label="Gust pushing right">
+        <svg viewBox="0 0 14 12" aria-hidden="true"><path d="M5 2l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 6h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <span class="dock-sep" aria-hidden="true"></span>
+
+    <div class="dock-grp seg" role="radiogroup" aria-label="Speed" id="speed">
+      <button data-speed="watch">Watch</button>
+      <button data-speed="fast">Fast</button>
+      <button data-speed="train">Train</button>
+    </div>
+
+    <span class="dock-sep" aria-hidden="true"></span>
+
+    <div class="dock-grp">
+      <button id="exam-btn" class="tool wide" title="No exploration, no learning: tests only what the graph knows" aria-pressed="false">Exam</button>
+      <button id="reactor-btn" class="tool wide" title="Repaint the view with Reactor (paid GPU time, capped)" aria-pressed="false">Photoreal</button>
+      <button id="btn-analysis" class="tool wide" title="Open the write-up" aria-pressed="false">Analysis</button>
+      <button id="btn-live" class="tool wide" hidden>Back to live</button>
+    </div>
+
+    <input type="checkbox" id="exam" class="sr" aria-hidden="true">
+    <input type="checkbox" id="reactor" class="sr" aria-hidden="true">
+  </div>
+
+  <!-- ─────────────── analysis overlay ─────────────── -->
+  <section class="analysis" id="analysis" hidden>
+    <button class="close" id="analysis-close" aria-label="Close">✕</button>
+    <div class="analysis-scroll">
+
+      <article class="brief">
+        <p class="eyebrow">Graph Hacks · Agents That Act on Connected Data · Agent Memory</p>
+        <h1>A lander that keeps its mind in a graph</h1>
+        <p class="lede">
+          A reinforcement-learning agent normally ends up as a neural network: a block of weights
+          that lands the craft but cannot tell you anything about it. When it crashes you can
+          retrain, but you cannot ask <em>why</em>. There is nothing in there to query.
+        </p>
+        <p class="lede">
+          crashgraph removes the network. The pilot has no weights and no model file. Before every
+          engine decision it reads FalkorDB; after every attempt it writes back what happened. The
+          policy <em>is</em> the graph — about a hundred thousand state tiles, the situations the
+          craft passes through, and the transitions between them. The memory it flies on is the
+          same memory you can interrogate, with ordinary Cypher.
+        </p>
+        <div class="brief-grid">
+          <div><b>The test</b><span>delete the graph and the craft must fail completely</span></div>
+          <div><b>Physics</b><span>Gymnasium LunarLander-v3 on Box2D, unmodified</span></div>
+          <div><b>Memory</b><span>one FalkorDB graph per world, isolated</span></div>
+        </div>
+      </article>
+
+      <section class="acard">
+        <header><h2>Learning, per world</h2><span class="note">score per attempt, smoothed over 50</span></header>
+        <canvas id="cmp-curve" height="230" aria-label="Learning curves compared across worlds"></canvas>
+        <div class="legend" id="cmp-legend"></div>
+      </section>
+
+      <div class="acols">
+        <section class="acard">
+          <header><h2>Worlds</h2></header>
+          <div class="tablewrap">
+            <table class="data" id="cmp-table">
+              <thead><tr><th>World</th><th>Gravity</th><th>Wind</th><th>Attempts</th><th>Landed</th><th>Tiles</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="hint">Ares and Titan were seeded with Luna's tiles, then trained on their own
+            physics. Harder air means a lower landing rate on the same budget.</p>
+        </section>
+
+        <section class="acard">
+          <header><h2>How the memory grew</h2></header>
+          <canvas id="cmp-growth" height="140" aria-label="Situations discovered as attempts accumulate"></canvas>
+          <p class="hint">New situations appear quickly, then level off: the craft stops meeting
+            states it has never seen, which is when the landing rate climbs.</p>
+        </section>
+      </div>
+
+      <section class="acard">
+        <header><h2>Check the work</h2><span class="note">every number has a source</span></header>
+        <p class="summary">Nothing here is hand-tuned. The physics, the reward and the learning rule
+          are standard and published; the graph work is FalkorDB's own algorithms.</p>
+        <div class="refs" id="refs"></div>
+      </section>
+
+    </div>
+  </section>
+</div>
+
+<dialog class="ask" id="ask">
+  <form method="dialog">
+    <h3 id="ask-title">Are you sure?</h3>
+    <p id="ask-body"></p>
+    <label class="ask-input" id="ask-input-wrap" hidden>
+      <span id="ask-input-label">Name</span>
+      <input id="ask-input" class="mono" type="text">
+    </label>
+    <menu>
+      <button value="cancel" class="btn">Cancel</button>
+      <button value="ok" class="btn primary" id="ask-ok">Confirm</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="/static/vendor/gsap.min.js"></script>
 <script type="module" src="/static/app.js"></script>
 </body>
 </html>

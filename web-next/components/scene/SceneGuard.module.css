@@ -1,0 +1,25 @@
+.wrap {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 24px;
+  /* never let a failure show as a blank white page */
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(143, 180, 220, .07), transparent 60%),
+    var(--stage-bg);
+}
+
+.card {
+  max-width: 46ch;
+  padding: 22px 24px;
+  background: var(--panel);  border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.card h2 { font-size: 15px; margin-bottom: 10px; }
+.card p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; color: var(--ink-2); }
+.card ul { margin: 0 0 12px; padding-left: 18px; font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+.card li { margin-bottom: 5px; }
+.card code {
+  font: 400 11px/1.5 var(--mono); color: var(--accent);
+  background: var(--accent-wash); padding: 1px 5px; border-radius: 3px;
+}
+.mono { font-family: var(--mono); font-size: 11.5px !important; overflow-wrap: anywhere; }

@@ -49,11 +49,35 @@ def connect():
         url = "redis://localhost:6379"   # FalkorDBLite has no Windows build: use Docker (docker compose up -d)
     if url:
         from falkordb import FalkorDB
-        return FalkorDB.from_url(url), url
+        db = FalkorDB.from_url(url)
+        _raise_read_timeout(db)
+        return db, url
     from redislite.falkordb_client import FalkorDB
     path = os.environ.get("CRASHGRAPH_DB", os.path.join(os.getcwd(), "data", "crashgraph.db"))
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    return FalkorDB(path), f"embedded:{path}"
+    db = FalkorDB(path)
+    _raise_read_timeout(db)
+    return db, f"embedded:{path}"
+
+
+def _raise_read_timeout(db, ms=30000):
+    """Lift FalkorDB's one-second default cap on read queries.
+
+    That default is sized for an interactive console, and nothing here is. The pilot reads
+    tiles hundreds of times per attempt and the explanation views scan the whole graph; when
+    the two overlap, a read goes over a second and comes back as `Query timed out`. On the
+    pilot's path that kills the attempt mid-flight and the trainer logs a traceback.
+
+    Best effort: a managed instance may refuse CONFIG SET, and the explicit per-query timeouts
+    in explain.py stand on their own if it does.
+    """
+    try:
+        db.connection.execute_command("GRAPH.CONFIG", "SET", "TIMEOUT_DEFAULT", str(ms))
+    except Exception:
+        try:
+            db.connection.execute_command("GRAPH.CONFIG", "SET", "TIMEOUT", str(ms))
+        except Exception:
+            pass
 
 
 class GraphMemory:
@@ -82,9 +106,14 @@ class GraphMemory:
         self.q("UNWIND $os AS o MERGE (:Outcome {name:o})", {"os": OUTCOMES})
 
     # ------------------------------------------------------- procedural memory
+    # The pilot cannot survive losing this one: it is read before every decision, and a
+    # timeout here ends the attempt rather than slowing it down.
+    READ_MS = 30000
+
     def read_tiles(self, keys):
         """Action values for the given tile keys. Missing tiles are unknown (zeros)."""
-        res = self.q("MATCH (t:Tile) WHERE t.k IN $ks RETURN t.k, t.q", {"ks": list(keys)}, ro=True)
+        res = self.q("MATCH (t:Tile) WHERE t.k IN $ks RETURN t.k, t.q", {"ks": list(keys)},
+                     ro=True, timeout=self.READ_MS)
         return {k: v for k, v in res.result_set}
 
     def write_tiles(self, deltas):

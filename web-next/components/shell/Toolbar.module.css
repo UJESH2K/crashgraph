@@ -1,0 +1,87 @@
+.bar {
+  display: flex; align-items: center; gap: 10px;
+  height: 100%; padding: 0 10px 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.bar::-webkit-scrollbar { height: 0; }
+
+.brand { display: flex; align-items: center; gap: 8px; flex: none; }
+.mark { display: flex; color: var(--accent); }
+.brand b { font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; }
+
+.sep { width: 1px; height: 20px; background: var(--line); flex: none; }
+
+/* world picker */
+.world { position: relative; flex: none; }
+.worldBtn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 9px;
+  background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.worldBtn:hover { border-color: var(--ink-3); }
+.worldBtn small { font: 400 10px/1 var(--mono); color: var(--ink-3); }
+.chev { width: 9px; height: 6px; color: var(--ink-3); }
+
+.menu {
+  position: absolute; top: calc(100% + 5px); left: 0; z-index: 20;
+  min-width: 206px; padding: 3px;
+  background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-sm);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .45);
+}
+.menu button {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  width: 100%; padding: 7px 9px; border: 0; border-radius: 2px;
+  background: transparent; cursor: pointer; text-align: left;
+}
+.menu button small { font: 400 10px/1 var(--mono); color: var(--ink-3); }
+.menu button:hover { background: var(--input); }
+.menu button[aria-checked="true"] { background: var(--accent-wash); }
+.menu button[aria-checked="true"] small { color: var(--accent); }
+
+/* transport */
+.grp { display: flex; align-items: center; gap: 3px; flex: none; }
+.tool {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; min-width: 28px; padding: 0 9px;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  color: var(--ink-2); font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.tool svg { width: 11px; height: 11px; flex: none; }
+.tool:hover:not(:disabled) { background: var(--raised); color: var(--ink); border-color: var(--line); }
+.tool:disabled { opacity: .34; cursor: not-allowed; }
+.tool[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; border-color: var(--accent); }
+.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); border-color: var(--accent); }
+
+.seg { display: flex; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; flex: none; }
+.seg button {
+  height: 28px; padding: 0 10px;
+  background: var(--raised); border: 0; border-right: 1px solid var(--line);
+  color: var(--ink-3); font-size: 11px; cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-checked="true"] { background: var(--accent-wash); color: var(--accent); }
+
+.grow { flex: 1; min-width: 8px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; flex: none;
+  background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-sm);
+  font: 400 10.5px/1 var(--mono); color: var(--ink-2);
+}
+.chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.chip[data-state="open"] i { background: var(--ok); }
+.chip[data-state="closed"] i { background: var(--bad); }
+
+@media (max-width: 1180px) { .hideSm { display: none; } }
+
+/* Below this the bar would scroll and take the stage switch - the one control a narrow
+   window cannot do without - off the end of it. The gusts go instead: they are a thing to
+   play with while watching a landing, which is not what a narrow window is for. */
+@media (max-width: 1000px) { .hideMd { display: none; } }
