@@ -51,6 +51,9 @@ RUN uv pip install --python /opt/venv/bin/python -r requirements.txt \
 
 COPY crashgraph/ ./crashgraph/
 COPY web/ ./web/
+# The vanilla console at /classic wants the same three models the Next one does. They are
+# committed once, under web-next/public/assets, and copied across here rather than stored twice.
+COPY web-next/public/assets/ ./web/assets/
 COPY server.py train.py removal_test.py mcp_server.py ./
 COPY --from=console /console/out ./web-next/out
 COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh

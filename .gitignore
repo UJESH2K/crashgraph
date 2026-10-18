@@ -5,14 +5,16 @@ __pycache__/
 *.rdb
 .env
 
-# Third-party 3D models: not redistributed with the repo (see README > Credits)
+# The 3D models live in one place, web-next/public/assets, and are committed (see
+# README > Credits for the licences and attribution). web/assets is the vanilla console's
+# copy of the same three files: Docker populates it from the committed set, and locally you
+# copy them across once, so the binaries are not stored twice.
 web/assets/*.glb
 
 # Next.js
 web-next/node_modules/
 web-next/.next/
 web-next/.next-export/
-web-next/public/assets/*.glb
 web-next/tsconfig.tsbuildinfo
 # The static export is a build output, and it copies public/ wholesale - including the
 # third-party .glb models, which are not redistributed with this repo (see README > Credits).
