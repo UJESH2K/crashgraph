@@ -11,6 +11,7 @@ web/assets/*.glb
 # Next.js
 web-next/node_modules/
 web-next/.next/
+web-next/.next-export/
 web-next/public/assets/*.glb
 web-next/tsconfig.tsbuildinfo
 # The static export is a build output, and it copies public/ wholesale - including the
