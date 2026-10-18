@@ -228,11 +228,13 @@ export function Scene({ free, onTakeOver, paused }: {
     >
       <color attach="background" args={["#05070b"]} />
       <Rig world={world} />
-      <Suspense fallback={null}>
-        <Skybox />
-        <Terrain terrain={terrain} world={world} />
-        <Lander flight={flight} />
-      </Suspense>
+      {/* No single boundary around all three: one Suspense with a null fallback meant the
+          14 MB terrain scan held back the craft and the sky as well, and the whole view stayed
+          black until every byte had landed. Each model now waits on its own, behind something
+          already drawn. */}
+      <Suspense fallback={null}><Skybox /></Suspense>
+      <Terrain terrain={terrain} world={world} />
+      <Lander flight={flight} />
       <Stars />
       <CameraRig flight={flight} terrain={terrain} free={free} onTakeOver={onTakeOver} />
     </Canvas>

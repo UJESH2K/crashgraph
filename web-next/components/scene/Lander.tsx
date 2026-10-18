@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useOptionalAsset } from "./optional";
@@ -21,10 +21,13 @@ export interface FlightRef {
  */
 export function Lander({ flight }: { flight: React.MutableRefObject<FlightRef> }) {
   const present = useOptionalAsset("/assets/vikram.glb");
-  // Nothing until the question is settled: rendering the built-in shape and then swapping it
-  // would remount the craft and jolt its smoothed position.
-  if (present === null) return null;
-  return present ? <ModelledCraft flight={flight} /> : <Craft flight={flight} model={null} />;
+  const builtIn = <Craft flight={flight} model={null} />;
+
+  // Unknown or absent: fly the built-in craft. Present: fly the built-in craft *now* and let
+  // the model replace it when it arrives. Waiting on the download would mean an empty sky for
+  // as long as it takes, which over a slow link is most of an attempt.
+  if (!present) return builtIn;
+  return <Suspense fallback={builtIn}><ModelledCraft flight={flight} /></Suspense>;
 }
 
 /** Loads the glTF. Only ever mounted when the file exists. */
@@ -64,7 +67,9 @@ function Craft({
   const rcsL = useRef<THREE.Mesh>(null);
   const rcsR = useRef<THREE.Mesh>(null);
   const engineLight = useRef<THREE.PointLight>(null);
-  const shown = useRef({ x: 10, y: 13, a: 0 });
+  // Seeded from the live target, not a constant: this component is remounted when the
+  // glTF swaps in, and starting from (10, 13) again would jolt the craft across the sky.
+  const shown = useRef({ x: flight.current.x, y: flight.current.y, a: flight.current.a });
 
   useEffect(() => store.onOutcome(o => {
     flight.current.crashed = o === "crashed" || o === "flew_off";

@@ -50,6 +50,24 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+@app.middleware("http")
+async def cache_static(request, call_next):
+    """Let the browser keep the heavy, never-changing things.
+
+    The console ships ~19 MB of glTF and a hashed JS bundle. Without this every reload pulls
+    them again, which on a small instance is most of the wait. Next's own output is content
+    hashed, so it is safe to pin for a year; the models are pinned for a day because they sit
+    at a stable path and a new build should still be able to replace them.
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/_next/static/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("/assets/") or path.startswith("/static/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
 clients: set = set()
 loop: asyncio.AbstractEventLoop | None = None
 db, DB_WHERE = connect()

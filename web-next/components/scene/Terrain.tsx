@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import { useOptionalAsset } from "./optional";
 import * as THREE from "three";
@@ -45,9 +45,11 @@ const SEGS = 300;
  * terrain is identical and merely plainer.
  */
 export function Terrain({ terrain, world }: { terrain: TerrainData | null; world: string }) {
-  return useOptionalAsset("/assets/petavius.glb")
-    ? <ScannedTerrain terrain={terrain} world={world} />
-    : <TerrainMesh terrain={terrain} world={world} maps={{}} />;
+  const plain = <TerrainMesh terrain={terrain} world={world} maps={{}} />;
+  // The scan is 14 MB. The ground it is painted onto costs nothing, so draw that straight away
+  // and let the photograph arrive on top of it rather than holding the whole scene back.
+  if (!useOptionalAsset("/assets/petavius.glb")) return plain;
+  return <Suspense fallback={plain}><ScannedTerrain terrain={terrain} world={world} /></Suspense>;
 }
 
 /** Loads the scan and hands its texture maps down. Only mounted when the file exists. */
