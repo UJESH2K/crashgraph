@@ -20,11 +20,13 @@ const API = process.env.CRASHGRAPH_API ?? "http://127.0.0.1:8000";
 const nextConfig = {
   reactStrictMode: true,
 
-  // Separate build directories. Both modes write a full build, so sharing .next means an
-  // export silently invalidates whatever `next start` is serving: the HTML keeps pointing at
-  // chunk names that no longer exist and the page half-loads with 400s.
+  // The export writes its static site into distDir, so naming it `out` both keeps the
+  // familiar output path and keeps the two modes apart. They must be apart: both write a
+  // full build, and sharing .next means an export silently invalidates whatever `next start`
+  // is serving — the HTML keeps pointing at chunk names that are no longer on disk and the
+  // page half-loads with 400s.
   ...(EXPORT
-    ? { output: "export", distDir: ".next-export", images: { unoptimized: true } }
+    ? { output: "export", distDir: "out", images: { unoptimized: true } }
     : {
         env: {
           NEXT_PUBLIC_API_ORIGIN: API,
